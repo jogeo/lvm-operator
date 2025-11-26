@@ -11,6 +11,7 @@ import (
 
 	// Import the test packages
 	_ "github.com/openshift/lvm-operator/v4/test/integration/sno"
+	_ "github.com/openshift/lvm-operator/v4/test/integration/tests"
 )
 
 func main() {
@@ -22,6 +23,13 @@ func main() {
 			Name: "openshift/lvm-operator/test/integration/single-node",
 			Qualifiers: []string{
 				`labels.exists(l, l=="SNO")`,
+			},
+		},
+		{
+			Name: "openshift/lvm-operator/test/integration/lvms",
+			Qualifiers: []string{
+				`labels.exists(l, l=="LVMS")`,
+				`labels.exists(l, l=="Disruptive")`,
 			},
 		},
 	}
