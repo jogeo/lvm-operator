@@ -1,12 +1,10 @@
 package tests
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	exutil "github.com/openshift/origin/test/extended/util"
 	"github.com/tidwall/gjson"
 	"k8s.io/apimachinery/pkg/util/wait"
 	e2e "k8s.io/kubernetes/test/e2e/framework"
@@ -16,21 +14,20 @@ import (
 )
 
 // Execute command in node
-func execCommandInSpecificNode(oc *exutil.CLI, nodeHostName string, command string) (output string, err error) {
-	debugNodeNamespace := oc.Namespace()
-	executeCmd := append([]string{"/bin/sh", "-c"}, command)
+func execCommandInSpecificNode(tc *TestClient, nodeHostName string, command string) (output string, err error) {
+	debugNodeNamespace := tc.Namespace()
 	executeOption := []string{"-q"}
 	// Check whether current namespace is Active
-	nsState, err := oc.AsAdmin().Run("get").Args("ns/"+debugNodeNamespace, "-o=jsonpath={.status.phase}", "--ignore-not-found").Output()
+	nsState, err := tc.AsAdmin().Run("get").Args("ns/"+debugNodeNamespace, "-o=jsonpath={.status.phase}", "--ignore-not-found").Output()
 	if nsState != "Active" || err != nil {
 		debugNodeNamespace = "default"
 		executeOption = append(executeOption, "--to-namespace="+debugNodeNamespace)
 	}
 
-	// Running oc debug node in normal projects
+	// Running tc debug node in normal projects
 	// (normal projects mean projects that are not clusters default projects like: like "default", "openshift-xxx" et al)
 	// need extra configuration on 4.12+ ocp test clusters
-	// https://github.com/openshift/oc/blob/master/pkg/helpers/cmd/errors.go#L24-L29
+	// https://github.com/openshift/tc/blob/master/pkg/helpers/cmd/errors.go#L24-L29
 	var stdOut, stdErr string
 	// Retry to avoid system issue: "error: unable to create the debug pod ..."
 	wait.Poll(10*time.Second, 30*time.Second, func() (bool, error) {
@@ -44,7 +41,7 @@ func execCommandInSpecificNode(oc *exutil.CLI, nodeHostName string, command stri
 
 	// Adapt Pod Security changed on k8s v1.23+
 	// https://kubernetes.io/docs/tutorials/security/cluster-level-pss/
-	// Ignore the oc debug node output warning info: "Warning: would violate PodSecurity "restricted:latest": host namespaces (hostNetwork=true, hostPID=true), ..."
+	// Ignore the tc debug node output warning info: "Warning: would violate PodSecurity "restricted:latest": host namespaces (hostNetwork=true, hostPID=true), ..."
 	if strings.Contains(strings.ToLower(stdErr), "warning") {
 		output = stdOut
 	} else {
@@ -60,10 +57,10 @@ func execCommandInSpecificNode(oc *exutil.CLI, nodeHostName string, command stri
 }
 
 // Check the Volume mounted on the Node
-func checkVolumeMountOnNode(oc *exutil.CLI, volumeName string, nodeName string) {
+func checkVolumeMountOnNode(tc *TestClient, volumeName string, nodeName string) {
 	command := "mount | grep " + volumeName
-	err := wait.Poll(10*time.Second, 60*time.Second, func() (bool, error) {
-		_, err := execCommandInSpecificNode(oc, nodeName, command)
+	_ = wait.Poll(10*time.Second, 60*time.Second, func() (bool, error) {
+		_, err := execCommandInSpecificNode(tc, nodeName, command)
 		if err != nil {
 			return false, nil
 		}
@@ -72,10 +69,10 @@ func checkVolumeMountOnNode(oc *exutil.CLI, volumeName string, nodeName string) 
 }
 
 // Check the Volume not mounted on the Node
-func checkVolumeNotMountOnNode(oc *exutil.CLI, volumeName string, nodeName string) {
+func checkVolumeNotMountOnNode(tc *TestClient, volumeName string, nodeName string) {
 	command := "mount | grep -c \"" + volumeName + "\" || true"
-	err := wait.Poll(10*time.Second, 180*time.Second, func() (bool, error) {
-		count, err := execCommandInSpecificNode(oc, nodeName, command)
+	_ = wait.Poll(10*time.Second, 180*time.Second, func() (bool, error) {
+		count, err := execCommandInSpecificNode(tc, nodeName, command)
 		if err != nil {
 			e2e.Logf("Err Occurred: %v, trying again ...", err)
 			return false, nil
@@ -89,10 +86,10 @@ func checkVolumeNotMountOnNode(oc *exutil.CLI, volumeName string, nodeName strin
 }
 
 // Check the Volume not detached from the Node
-func checkVolumeDetachedFromNode(oc *exutil.CLI, volumeName string, nodeName string) {
+func checkVolumeDetachedFromNode(tc *TestClient, volumeName string, nodeName string) {
 	command := "lsblk | grep -c \"" + volumeName + "\" || true"
-	err := wait.Poll(10*time.Second, 120*time.Second, func() (bool, error) {
-		count, err := execCommandInSpecificNode(oc, nodeName, command)
+	_ = wait.Poll(10*time.Second, 120*time.Second, func() (bool, error) {
+		count, err := execCommandInSpecificNode(tc, nodeName, command)
 		if err != nil {
 			e2e.Logf("Err Occurred: %v, trying again ...", err)
 			return false, nil
@@ -106,10 +103,10 @@ func checkVolumeDetachedFromNode(oc *exutil.CLI, volumeName string, nodeName str
 }
 
 // Check the mounted volume on the Node contains content by cmd
-func checkVolumeMountCmdContain(oc *exutil.CLI, volumeName string, nodeName string, content string) {
+func checkVolumeMountCmdContain(tc *TestClient, volumeName string, nodeName string, content string) {
 	command := "mount | grep " + volumeName
-	err := wait.Poll(10*time.Second, 60*time.Second, func() (bool, error) {
-		msg, err := execCommandInSpecificNode(oc, nodeName, command)
+	_ = wait.Poll(10*time.Second, 60*time.Second, func() (bool, error) {
+		msg, err := execCommandInSpecificNode(tc, nodeName, command)
 		if err != nil {
 			e2e.Logf("Err Occurred: %v, trying again ...", err)
 			return false, nil
@@ -119,12 +116,12 @@ func checkVolumeMountCmdContain(oc *exutil.CLI, volumeName string, nodeName stri
 }
 
 // Get the Node List for pod with label
-func getNodeListForPodByLabel(oc *exutil.CLI, namespace string, labelName string) ([]string, error) {
-	podsList, err := getPodsListByLabel(oc, namespace, labelName)
+func getNodeListForPodByLabel(tc *TestClient, namespace string, labelName string) ([]string, error) {
+	podsList, err := getPodsListByLabel(tc, namespace, labelName)
 	o.Expect(err).NotTo(o.HaveOccurred())
 	var nodeList []string
 	for _, pod := range podsList {
-		nodeName, err := oc.WithoutNamespace().Run("get").Args("pod", pod, "-n", namespace, "-o=jsonpath={.spec.nodeName}").Output()
+		nodeName, err := tc.WithoutNamespace().Run("get").Args("pod", pod, "-n", namespace, "-o=jsonpath={.spec.nodeName}").Output()
 		o.Expect(err).NotTo(o.HaveOccurred())
 		e2e.Logf("%s is on Node:\"%s\"", pod, nodeName)
 		nodeList = append(nodeList, nodeName)
@@ -133,57 +130,57 @@ func getNodeListForPodByLabel(oc *exutil.CLI, namespace string, labelName string
 }
 
 // GetNodeNameByPod gets the pod located node's name
-func getNodeNameByPod(oc *exutil.CLI, namespace string, podName string) string {
-	nodeName, err := oc.WithoutNamespace().Run("get").Args("pod", podName, "-n", namespace, "-o=jsonpath={.spec.nodeName}").Output()
+func getNodeNameByPod(tc *TestClient, namespace string, podName string) string {
+	nodeName, err := tc.WithoutNamespace().Run("get").Args("pod", podName, "-n", namespace, "-o=jsonpath={.spec.nodeName}").Output()
 	o.Expect(err).NotTo(o.HaveOccurred())
 	e2e.Logf("The nodename in namespace %s for pod %s is %s", namespace, podName, nodeName)
 	return nodeName
 }
 
 // Get the cluster worker nodes info
-func getWorkersInfo(oc *exutil.CLI) string {
-	workersInfo, err := oc.AsAdmin().WithoutNamespace().Run("get").Args("nodes", "-l", "node-role.kubernetes.io/worker", "-o", "json").Output()
+func getWorkersInfo(tc *TestClient) string {
+	workersInfo, err := tc.AsAdmin().WithoutNamespace().Run("get").Args("nodes", "-l", "node-role.kubernetes.io/worker", "-o", "json").Output()
 	o.Expect(err).NotTo(o.HaveOccurred())
 	return workersInfo
 }
 
-func getWorkersList(oc *exutil.CLI) []string {
-	output, err := oc.AsAdmin().WithoutNamespace().Run("get").Args("nodes", "-l", "node-role.kubernetes.io/worker", "-o=jsonpath={.items[*].metadata.name}").Output()
+func getWorkersList(tc *TestClient) []string {
+	output, err := tc.AsAdmin().WithoutNamespace().Run("get").Args("nodes", "-l", "node-role.kubernetes.io/worker", "-o=jsonpath={.items[*].metadata.name}").Output()
 	o.Expect(err).NotTo(o.HaveOccurred())
 	return strings.Fields(output)
 }
 
 // Get all csi nodes name list
-func getCSINodesList(oc *exutil.CLI) []string {
-	output, err := oc.AsAdmin().WithoutNamespace().Run("get").Args("csinodes", "-o=jsonpath={.items[*].metadata.name}").Output()
+func getCSINodesList(tc *TestClient) []string {
+	output, err := tc.AsAdmin().WithoutNamespace().Run("get").Args("csinodes", "-o=jsonpath={.items[*].metadata.name}").Output()
 	o.Expect(err).NotTo(o.HaveOccurred())
 	return strings.Fields(output)
 }
 
 // Get allocatable volume count per csi node name
-func getAllocatableVolumeCountPerCSINode(oc *exutil.CLI, nodeName string, clusterCsiDriver string) int64 {
-	output, _ := oc.AsAdmin().WithoutNamespace().Run("get").Args("csinode", nodeName, "-o=jsonpath={.spec.drivers[?(@.name==\""+clusterCsiDriver+"\")].allocatable.count}").Output()
+func getAllocatableVolumeCountPerCSINode(tc *TestClient, nodeName string, clusterCsiDriver string) int64 {
+	output, _ := tc.AsAdmin().WithoutNamespace().Run("get").Args("csinode", nodeName, "-o=jsonpath={.spec.drivers[?(@.name==\""+clusterCsiDriver+"\")].allocatable.count}").Output()
 	volCount, _ := strconv.ParseInt(output, 10, 64)
 	return volCount
 }
 
 // Get list of attached persistent volume names on a given node
-func getAttachedVolumesListByNode(oc *exutil.CLI, nodeName string) []string {
-	pvList, _ := oc.AsAdmin().WithoutNamespace().Run("get").Args("volumeattachments", "-ojsonpath={.items[?(@.spec.nodeName==\""+nodeName+"\")].spec.source.persistentVolumeName}").Output()
+func getAttachedVolumesListByNode(tc *TestClient, nodeName string) []string {
+	pvList, _ := tc.AsAdmin().WithoutNamespace().Run("get").Args("volumeattachments", "-ojsonpath={.items[?(@.spec.nodeName==\""+nodeName+"\")].spec.source.persistentVolumeName}").Output()
 	return strings.Fields(pvList)
 }
 
 // Get the compact node list, compact node has both master and worker role on it
-func getCompactNodeList(oc *exutil.CLI) []string {
-	output, err := oc.AsAdmin().WithoutNamespace().Run("get").Args("nodes", "-l", "node-role.kubernetes.io/master,node-role.kubernetes.io/worker", "--ignore-not-found", "-o=jsonpath={.items[*].metadata.name}").Output()
+func getCompactNodeList(tc *TestClient) []string {
+	output, err := tc.AsAdmin().WithoutNamespace().Run("get").Args("nodes", "-l", "node-role.kubernetes.io/master,node-role.kubernetes.io/worker", "--ignore-not-found", "-o=jsonpath={.items[*].metadata.name}").Output()
 	o.Expect(err).NotTo(o.HaveOccurred())
 	return strings.Fields(output)
 }
 
 // Get the cluster schedulable worker nodes names with the same available zone or without the available zone
-func getTwoSchedulableWorkersWithSameAz(oc *exutil.CLI) (schedulableWorkersWithSameAz []string, azName string) {
+func getTwoSchedulableWorkersWithSameAz(tc *TestClient) (schedulableWorkersWithSameAz []string, azName string) {
 	var (
-		allNodes                   = getAllNodesInfo(oc)
+		allNodes                   = getAllNodesInfo(tc)
 		allSchedulableLinuxWorkers = getSchedulableLinuxWorkers(allNodes)
 		schedulableWorkersWithAz   = make(map[string]string)
 	)
@@ -203,28 +200,28 @@ func getTwoSchedulableWorkersWithSameAz(oc *exutil.CLI) (schedulableWorkersWithS
 }
 
 // Drain specified node
-func drainSpecificNode(oc *exutil.CLI, nodeName string) {
-	e2e.Logf("oc adm drain nodes/" + nodeName + " --ignore-daemonsets --delete-emptydir-data --force --timeout=600s")
-	err := oc.AsAdmin().WithoutNamespace().Run("adm").Args("drain", "nodes/"+nodeName, "--ignore-daemonsets", "--delete-emptydir-data", "--force", "--timeout=600s").Execute()
+func drainSpecificNode(tc *TestClient, nodeName string) {
+	e2e.Logf("tc adm drain nodes/" + nodeName + " --ignore-daemonsets --delete-emptydir-data --force --timeout=600s")
+	err := tc.AsAdmin().WithoutNamespace().Run("adm").Args("drain", "nodes/"+nodeName, "--ignore-daemonsets", "--delete-emptydir-data", "--force", "--timeout=600s").Execute()
 	o.Expect(err).NotTo(o.HaveOccurred())
 }
 
-func drainNodeWithPodLabel(oc *exutil.CLI, nodeName string, podLabel string) {
-	e2e.Logf("oc adm drain nodes/" + nodeName + " --pod-selector" + podLabel + " --ignore-daemonsets --delete-emptydir-data --force --timeout=600s")
-	err := oc.AsAdmin().WithoutNamespace().Run("adm").Args("drain", "nodes/"+nodeName, "--pod-selector", "app="+podLabel, "--ignore-daemonsets", "--delete-emptydir-data", "--force", "--timeout=600s").Execute()
+func drainNodeWithPodLabel(tc *TestClient, nodeName string, podLabel string) {
+	e2e.Logf("tc adm drain nodes/" + nodeName + " --pod-selector" + podLabel + " --ignore-daemonsets --delete-emptydir-data --force --timeout=600s")
+	err := tc.AsAdmin().WithoutNamespace().Run("adm").Args("drain", "nodes/"+nodeName, "--pod-selector", "app="+podLabel, "--ignore-daemonsets", "--delete-emptydir-data", "--force", "--timeout=600s").Execute()
 	o.Expect(err).NotTo(o.HaveOccurred())
 }
 
 // Uncordon specified node
-func uncordonSpecificNode(oc *exutil.CLI, nodeName string) error {
-	e2e.Logf("oc adm uncordon nodes/" + nodeName)
-	return oc.AsAdmin().WithoutNamespace().Run("adm").Args("uncordon", "nodes/"+nodeName).Execute()
+func uncordonSpecificNode(tc *TestClient, nodeName string) error {
+	e2e.Logf("tc adm uncordon nodes/" + nodeName)
+	return tc.AsAdmin().WithoutNamespace().Run("adm").Args("uncordon", "nodes/"+nodeName).Execute()
 }
 
 // Waiting specified node available: scheduleable and ready
-func waitNodeAvailable(oc *exutil.CLI, nodeName string) {
-	err := wait.Poll(defaultMaxWaitingTime/defaultIterationTimes, defaultMaxWaitingTime, func() (bool, error) {
-		nodeInfo, err := oc.AsAdmin().WithoutNamespace().Run("get").Args("nodes/"+nodeName, "-o", "json").Output()
+func waitNodeAvailable(tc *TestClient, nodeName string) {
+	_ = wait.Poll(defaultMaxWaitingTime/defaultIterationTimes, defaultMaxWaitingTime, func() (bool, error) {
+		nodeInfo, err := tc.AsAdmin().WithoutNamespace().Run("get").Args("nodes/"+nodeName, "-o", "json").Output()
 		if err != nil {
 			e2e.Logf("Get node status Err Occurred: \"%v\", try next round", err)
 			return false, nil
@@ -238,21 +235,21 @@ func waitNodeAvailable(oc *exutil.CLI, nodeName string) {
 }
 
 // Get Region info
-func getClusterRegion(oc *exutil.CLI) string {
-	node := getWorkersList(oc)[0]
-	region, err := oc.AsAdmin().WithoutNamespace().Run("get").Args("node", node, "-o=jsonpath={.metadata.labels.failure-domain\\.beta\\.kubernetes\\.io\\/region}").Output()
+func getClusterRegion(tc *TestClient) string {
+	node := getWorkersList(tc)[0]
+	region, err := tc.AsAdmin().WithoutNamespace().Run("get").Args("node", node, "-o=jsonpath={.metadata.labels.failure-domain\\.beta\\.kubernetes\\.io\\/region}").Output()
 	o.Expect(err).NotTo(o.HaveOccurred())
 	return region
 }
 
 // Check zoned or un-zoned nodes in cluster, currently works for azure only
-func checkNodeZoned(oc *exutil.CLI) bool {
+func checkNodeZoned(tc *TestClient) bool {
 	// https://kubernetes-sigs.github.io/cloud-provider-azure/topics/availability-zones/#node-labels
 	if cloudProvider == "azure" {
-		node := getWorkersList(oc)[0]
-		zone, err := oc.AsAdmin().WithoutNamespace().Run("get").Args("node", node, "-o=jsonpath={.metadata.labels.failure-domain\\.beta\\.kubernetes\\.io\\/zone}").Output()
+		node := getWorkersList(tc)[0]
+		zone, err := tc.AsAdmin().WithoutNamespace().Run("get").Args("node", node, "-o=jsonpath={.metadata.labels.failure-domain\\.beta\\.kubernetes\\.io\\/zone}").Output()
 		o.Expect(err).NotTo(o.HaveOccurred())
-		region := getClusterRegion(oc)
+		region := getClusterRegion(tc)
 		e2e.Logf("The zone is %s", zone)
 		e2e.Logf("The region is %s", region)
 		//if len(zone) == 1 {
@@ -281,13 +278,13 @@ type node struct {
 }
 
 // Get cluster all node information
-func getAllNodesInfo(oc *exutil.CLI) []node {
+func getAllNodesInfo(tc *TestClient) []node {
 	var (
 		// nodes []node
 		nodes    = make([]node, 0, 10)
 		zonePath = `metadata.labels.topology\.kubernetes\.io\/zone`
 	)
-	nodesInfoJSON, err := oc.AsAdmin().WithoutNamespace().Run("get").Args("nodes", "-o", "json").Output()
+	nodesInfoJSON, err := tc.AsAdmin().WithoutNamespace().Run("get").Args("nodes", "-o", "json").Output()
 	o.Expect(err).NotTo(o.HaveOccurred())
 	nodesList := strings.Split(strings.Trim(strings.Trim(gjson.Get(nodesInfoJSON, "items.#.metadata.name").String(), "["), "]"), ",")
 	for _, nodeName := range nodesList {
@@ -440,10 +437,10 @@ func getOneSchedulableMaster(allNodes []node) (expectedMater node) {
 }
 
 // Get 2 schedulable worker nodes with different available zones
-func getTwoSchedulableWorkersWithDifferentAzs(oc *exutil.CLI) []node {
+func getTwoSchedulableWorkersWithDifferentAzs(tc *TestClient) []node {
 	var (
 		expectedWorkers            = make([]node, 0, 2)
-		allNodes                   = getAllNodesInfo(oc)
+		allNodes                   = getAllNodesInfo(tc)
 		allSchedulableLinuxWorkers = getSchedulableLinuxWorkers(allNodes)
 	)
 	if len(allSchedulableLinuxWorkers) < 2 {
@@ -461,7 +458,7 @@ func getTwoSchedulableWorkersWithDifferentAzs(oc *exutil.CLI) []node {
 }
 
 // Returns 'True' if GCP cluster node vm-type is compatible with disk-type: "Hyperdisk" else returns 'False'
-func isGcpHyperDiskCompatibleCluster(oc *exutil.CLI, workernodeInstanceType string) bool {
+func isGcpHyperDiskCompatibleCluster(tc *TestClient, workernodeInstanceType string) bool {
 	hyperDiskCompatibleInstances := []string{"c3", "c3d", "c4", "c4a", "n4"} // diskType: 'hyperdisk' compatible GCP vm-instance-types
 	for _, instanceType := range hyperDiskCompatibleInstances {
 		if strings.Contains(workernodeInstanceType, instanceType) {

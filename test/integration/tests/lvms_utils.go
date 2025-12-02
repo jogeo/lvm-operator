@@ -9,7 +9,6 @@ import (
 	"time"
 
 	o "github.com/onsi/gomega"
-	exutil "github.com/openshift/origin/test/extended/util"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -115,143 +114,143 @@ func newLvmCluster(opts ...lvmClusterOption) lvmCluster {
 }
 
 // Create a new customized lvmCluster
-func (lvm *lvmCluster) create(oc *exutil.CLI) {
-	err := applyResourceFromTemplateAsAdmin(oc, "--ignore-unknown-parameters=true", "-f", lvm.template, "-p", "NAME="+lvm.name, "NAMESPACE="+lvm.namespace, "DEVICECLASSNAME="+lvm.deviceClassName,
+func (lvm *lvmCluster) create(tc *TestClient) {
+	err := applyResourceFromTemplateAsAdmin(tc, "--ignore-unknown-parameters=true", "-f", lvm.template, "-p", "NAME="+lvm.name, "NAMESPACE="+lvm.namespace, "DEVICECLASSNAME="+lvm.deviceClassName,
 		"FSTYPE="+lvm.fsType, "PATH="+lvm.paths[0], "OPTIONALPATH1="+lvm.optionalPaths[0], "OPTIONALPATH2="+lvm.optionalPaths[1])
 	o.Expect(err).NotTo(o.HaveOccurred())
 }
 
 // Create a new customized lvmCluster with optional paths and without mandatory paths
-func (lvm *lvmCluster) createWithoutMandatoryPaths(oc *exutil.CLI) {
+func (lvm *lvmCluster) createWithoutMandatoryPaths(tc *TestClient) {
 	deletePaths := []string{`items.0.spec.storage.deviceClasses.0.deviceSelector.paths`}
-	err := applyResourceFromTemplateDeleteParametersAsAdmin(oc, deletePaths, "--ignore-unknown-parameters=true", "-f", lvm.template, "-p", "NAME="+lvm.name, "NAMESPACE="+lvm.namespace, "DEVICECLASSNAME="+lvm.deviceClassName,
+	err := applyResourceFromTemplateDeleteParametersAsAdmin(tc, deletePaths, "--ignore-unknown-parameters=true", "-f", lvm.template, "-p", "NAME="+lvm.name, "NAMESPACE="+lvm.namespace, "DEVICECLASSNAME="+lvm.deviceClassName,
 		"FSTYPE="+lvm.fsType, "OPTIONALPATH1="+lvm.optionalPaths[0], "OPTIONALPATH2="+lvm.optionalPaths[1])
 	o.Expect(err).NotTo(o.HaveOccurred())
 }
 
 // Create a new customized lvmCluster with madatory paths and without optional paths
-func (lvm *lvmCluster) createWithoutOptionalPaths(oc *exutil.CLI) {
+func (lvm *lvmCluster) createWithoutOptionalPaths(tc *TestClient) {
 	deletePaths := []string{`items.0.spec.storage.deviceClasses.0.deviceSelector.optionalPaths`}
-	err := applyResourceFromTemplateDeleteParametersAsAdmin(oc, deletePaths, "--ignore-unknown-parameters=true", "-f", lvm.template, "-p", "NAME="+lvm.name, "NAMESPACE="+lvm.namespace, "DEVICECLASSNAME="+lvm.deviceClassName,
+	err := applyResourceFromTemplateDeleteParametersAsAdmin(tc, deletePaths, "--ignore-unknown-parameters=true", "-f", lvm.template, "-p", "NAME="+lvm.name, "NAMESPACE="+lvm.namespace, "DEVICECLASSNAME="+lvm.deviceClassName,
 		"FSTYPE="+lvm.fsType, "PATH="+lvm.paths[0])
 	o.Expect(err).NotTo(o.HaveOccurred())
 }
 
 // Create new LVMCluster with extra parameters for nodeSelector, key, operator and values should be provided in matchExpressions
-func (lvm *lvmCluster) createWithNodeSelector(oc *exutil.CLI, key string, operator string, values []string) {
+func (lvm *lvmCluster) createWithNodeSelector(tc *TestClient, key string, operator string, values []string) {
 	extraParameters := map[string]interface{}{
 		"jsonPath": `items.0.spec.storage.deviceClasses.0.nodeSelector.nodeSelectorTerms.0.matchExpressions.0.`,
 		"key":      key,
 		"operator": operator,
 		"values":   values,
 	}
-	err := applyResourceFromTemplateWithExtraParametersAsAdmin(oc, extraParameters, "--ignore-unknown-parameters=true", "-f", lvm.template, "-p", "NAME="+lvm.name, "NAMESPACE="+lvm.namespace, "DEVICECLASSNAME="+lvm.deviceClassName,
+	err := applyResourceFromTemplateWithExtraParametersAsAdmin(tc, extraParameters, "--ignore-unknown-parameters=true", "-f", lvm.template, "-p", "NAME="+lvm.name, "NAMESPACE="+lvm.namespace, "DEVICECLASSNAME="+lvm.deviceClassName,
 		"FSTYPE="+lvm.fsType, "PATH="+lvm.paths[0], "OPTIONALPATH1="+lvm.optionalPaths[0], "OPTIONALPATH2="+lvm.optionalPaths[1])
 	o.Expect(err).NotTo(o.HaveOccurred())
 }
 
 // Create a new customized LVMCluster with two device-classes
-func (lvm *lvmCluster) createWithMultiDeviceClasses(oc *exutil.CLI) {
-	err := applyResourceFromTemplateAsAdmin(oc, "--ignore-unknown-parameters=true", "-f", lvm.template, "-p", "NAME="+lvm.name, "NAMESPACE="+lvm.namespace, "DEVICECLASSNAME1="+lvm.deviceClassName,
+func (lvm *lvmCluster) createWithMultiDeviceClasses(tc *TestClient) {
+	err := applyResourceFromTemplateAsAdmin(tc, "--ignore-unknown-parameters=true", "-f", lvm.template, "-p", "NAME="+lvm.name, "NAMESPACE="+lvm.namespace, "DEVICECLASSNAME1="+lvm.deviceClassName,
 		"DEVICECLASSNAME2="+lvm.deviceClassName2, "FSTYPE1="+lvm.fsType, "FSTYPE2="+lvm.fsType2, "PATH1="+lvm.paths[0], "PATH2="+lvm.paths[1])
 	o.Expect(err).NotTo(o.HaveOccurred())
 }
 
 // Make a disk partition and create a logical volume on new volume group
-func createLogicalVolumeOnDisk(oc *exutil.CLI, nodeHostName string, disk string, vgName string, lvName string) {
+func createLogicalVolumeOnDisk(tc *TestClient, nodeHostName string, disk string, vgName string, lvName string) {
 	diskName := "/dev/" + disk
 	// Create LVM disk partition
 	createPartitionCmd := "echo -e 'n\np\n1\n\n\nw' | fdisk " + diskName
-	_, err := execCommandInSpecificNode(oc, nodeHostName, createPartitionCmd)
+	_, err := execCommandInSpecificNode(tc, nodeHostName, createPartitionCmd)
 	o.Expect(err).NotTo(o.HaveOccurred())
 
 	partitionName := diskName + "p1"
 	// Unmount the partition if it's mounted
 	unmountCmd := "umount " + partitionName + " || true"
-	_, err = execCommandInSpecificNode(oc, nodeHostName, unmountCmd)
+	_, err = execCommandInSpecificNode(tc, nodeHostName, unmountCmd)
 	o.Expect(err).NotTo(o.HaveOccurred())
 
 	// Create Physical Volume
 	createPV := "pvcreate " + partitionName
-	_, err = execCommandInSpecificNode(oc, nodeHostName, createPV)
+	_, err = execCommandInSpecificNode(tc, nodeHostName, createPV)
 	o.Expect(err).NotTo(o.HaveOccurred())
 
 	// Create Volume Group
 	createVG := "vgcreate " + vgName + " " + partitionName
-	_, err = execCommandInSpecificNode(oc, nodeHostName, createVG)
+	_, err = execCommandInSpecificNode(tc, nodeHostName, createVG)
 	o.Expect(err).NotTo(o.HaveOccurred())
 
 	// Create Logical Volume
 	createLV := "lvcreate -n " + lvName + " -l 100%FREE " + vgName
-	_, err = execCommandInSpecificNode(oc, nodeHostName, createLV)
+	_, err = execCommandInSpecificNode(tc, nodeHostName, createLV)
 	o.Expect(err).NotTo(o.HaveOccurred())
 }
 
 // Remove logical volume on volume group from backend disk
-func removeLogicalVolumeOnDisk(oc *exutil.CLI, nodeHostName string, disk string, vgName string, lvName string) {
+func removeLogicalVolumeOnDisk(tc *TestClient, nodeHostName string, disk string, vgName string, lvName string) {
 	diskName := "/dev/" + disk
 	partitionName := disk + "p1"
 	pvName := diskName + "p1"
 	existsLV := `lvdisplay /dev/` + vgName + `/` + lvName + ` && echo "true" || echo "false"`
-	outputLV, err := execCommandInSpecificNode(oc, nodeHostName, existsLV)
+	outputLV, err := execCommandInSpecificNode(tc, nodeHostName, existsLV)
 	o.Expect(err).NotTo(o.HaveOccurred())
 	lvExists := strings.Contains(outputLV, "true")
 	// If VG exists, proceed to check LV and remove accordingly
 	existsVG := `vgdisplay | grep -q '` + vgName + `' && echo "true" || echo "false"`
-	outputVG, err := execCommandInSpecificNode(oc, nodeHostName, existsVG)
+	outputVG, err := execCommandInSpecificNode(tc, nodeHostName, existsVG)
 	o.Expect(err).NotTo(o.HaveOccurred())
 	if strings.Contains(outputVG, "true") {
 		if lvExists {
 			// Remove Logical Volume (LV)
 			removeLV := "lvremove -f /dev/" + vgName + "/" + lvName
-			_, err = execCommandInSpecificNode(oc, nodeHostName, removeLV)
+			_, err = execCommandInSpecificNode(tc, nodeHostName, removeLV)
 			o.Expect(err).NotTo(o.HaveOccurred())
 		}
 		// Remove Volume Group (VG)
 		removeVG := "vgremove -f " + vgName
-		_, err = execCommandInSpecificNode(oc, nodeHostName, removeVG)
+		_, err = execCommandInSpecificNode(tc, nodeHostName, removeVG)
 		o.Expect(err).NotTo(o.HaveOccurred())
 	}
 	existsPV := `pvdisplay | grep -q '` + pvName + `' && echo "true" || echo "false"`
-	outputPV, err := execCommandInSpecificNode(oc, nodeHostName, existsPV)
+	outputPV, err := execCommandInSpecificNode(tc, nodeHostName, existsPV)
 	o.Expect(err).NotTo(o.HaveOccurred())
 	if strings.Contains(outputPV, "true") {
 		//Remove Physical Volume (PV)
 		removePV := "pvremove -f " + pvName
-		_, err = execCommandInSpecificNode(oc, nodeHostName, removePV)
+		_, err = execCommandInSpecificNode(tc, nodeHostName, removePV)
 		o.Expect(err).NotTo(o.HaveOccurred())
 	}
 	existsPartition := `lsblk | grep -q '` + partitionName + `' && echo "true" || echo "false"`
-	outputPartition, err := execCommandInSpecificNode(oc, nodeHostName, existsPartition)
+	outputPartition, err := execCommandInSpecificNode(tc, nodeHostName, existsPartition)
 	o.Expect(err).NotTo(o.HaveOccurred())
 	if strings.Contains(outputPartition, "true") {
 		// Remove LVM disk partition
 		removePartitionCmd := "echo -e 'd\nw' | fdisk " + diskName
-		_, err = execCommandInSpecificNode(oc, nodeHostName, removePartitionCmd)
+		_, err = execCommandInSpecificNode(tc, nodeHostName, removePartitionCmd)
 		o.Expect(err).NotTo(o.HaveOccurred())
 	}
 }
 
 // Create a new customized LVMCluster with forceWipeDevicesAndDestroyAllData configuration
-func (lvm *lvmCluster) createWithForceWipeDevicesAndDestroyAllData(oc *exutil.CLI) {
+func (lvm *lvmCluster) createWithForceWipeDevicesAndDestroyAllData(tc *TestClient) {
 	extraParameters := map[string]interface{}{
 		"jsonPath":                          `items.0.spec.storage.deviceClasses.0.deviceSelector.`,
 		"forceWipeDevicesAndDestroyAllData": true,
 	}
-	err := applyResourceFromTemplateWithExtraParametersAsAdmin(oc, extraParameters, "--ignore-unknown-parameters=true", "-f", lvm.template, "-p", "NAME="+lvm.name, "NAMESPACE="+lvm.namespace, "DEVICECLASSNAME="+lvm.deviceClassName,
+	err := applyResourceFromTemplateWithExtraParametersAsAdmin(tc, extraParameters, "--ignore-unknown-parameters=true", "-f", lvm.template, "-p", "NAME="+lvm.name, "NAMESPACE="+lvm.namespace, "DEVICECLASSNAME="+lvm.deviceClassName,
 		"FSTYPE="+lvm.fsType, "PATH="+lvm.paths[0], "OPTIONALPATH1="+lvm.optionalPaths[0], "OPTIONALPATH2="+lvm.optionalPaths[1])
 	o.Expect(err).NotTo(o.HaveOccurred())
 }
 
 // Create a new customized lvmCluster to return expected error
-func (lvm *lvmCluster) createToExpectError(oc *exutil.CLI) (string, error) {
-	output, err := applyResourceFromTemplateWithOutput(oc.AsAdmin(), "--ignore-unknown-parameters=true", "-f", lvm.template, "-p", "NAME="+lvm.name, "NAMESPACE="+lvm.namespace, "DEVICECLASSNAME="+lvm.deviceClassName,
+func (lvm *lvmCluster) createToExpectError(tc *TestClient) (string, error) {
+	output, err := applyResourceFromTemplateWithOutput(tc.AsAdmin(), "--ignore-unknown-parameters=true", "-f", lvm.template, "-p", "NAME="+lvm.name, "NAMESPACE="+lvm.namespace, "DEVICECLASSNAME="+lvm.deviceClassName,
 		"FSTYPE="+lvm.fsType, "PATH="+lvm.paths[0], "OPTIONALPATH1="+lvm.optionalPaths[0], "OPTIONALPATH2="+lvm.optionalPaths[1])
 	return output, err
 }
 
 // Use LVMCluster resource JSON file to create a new LVMCluster
-func (lvm *lvmCluster) createWithExportJSON(oc *exutil.CLI, originLVMExportJSON string, newLvmClusterName string) {
+func (lvm *lvmCluster) createWithExportJSON(tc *TestClient, originLVMExportJSON string, newLvmClusterName string) {
 	var (
 		err            error
 		outputJSONFile string
@@ -276,42 +275,42 @@ func (lvm *lvmCluster) createWithExportJSON(oc *exutil.CLI, originLVMExportJSON 
 	e2e.Logf("The new LVMCluster jsonfile of resource is %s", outputJSONFile)
 	jsonOutput, _ := ioutil.ReadFile(outputJSONFile)
 	debugLogf("The file content is: \n%s", jsonOutput)
-	_, err = oc.AsAdmin().WithoutNamespace().Run("apply").Args("-f", outputJSONFile).Output()
+	_, err = tc.AsAdmin().WithoutNamespace().Run("apply").Args("-f", outputJSONFile).Output()
 	o.Expect(err).NotTo(o.HaveOccurred())
 	e2e.Logf("The new LVMCluster:\"%s\" created", newLvmClusterName)
 }
 
 // Delete Specified lvmCluster
-func (lvm *lvmCluster) deleteAsAdmin(oc *exutil.CLI) {
-	oc.AsAdmin().WithoutNamespace().Run("delete").Args("lvmcluster", lvm.name, "--ignore-not-found").Execute()
+func (lvm *lvmCluster) deleteAsAdmin(tc *TestClient) {
+	tc.AsAdmin().WithoutNamespace().Run("delete").Args("lvmcluster", lvm.name, "--ignore-not-found").Execute()
 }
 
 // Get the current state of LVM Cluster
-func (lvm *lvmCluster) getLvmClusterStatus(oc *exutil.CLI) (string, error) {
-	lvmCluster, err := oc.AsAdmin().WithoutNamespace().Run("get").Args("lvmcluster", "-n", lvm.namespace, "-o", "json").Output()
+func (lvm *lvmCluster) getLvmClusterStatus(tc *TestClient) (string, error) {
+	lvmCluster, err := tc.AsAdmin().WithoutNamespace().Run("get").Args("lvmcluster", "-n", lvm.namespace, "-o", "json").Output()
 	lvmClusterState := gjson.Get(lvmCluster, "items.#(metadata.name="+lvm.name+").status.state").String()
 	e2e.Logf("The current LVM Cluster state is %q", lvmClusterState)
 	return lvmClusterState, err
 }
 
 // Get the description info of specified lvmCluster
-func (lvm *lvmCluster) describeLvmCluster(oc *exutil.CLI) string {
-	lvmClusterDesc, err := oc.AsAdmin().WithoutNamespace().Run("describe").Args("lvmcluster", "-n", lvm.namespace, lvm.name).Output()
+func (lvm *lvmCluster) describeLvmCluster(tc *TestClient) string {
+	lvmClusterDesc, err := tc.AsAdmin().WithoutNamespace().Run("describe").Args("lvmcluster", "-n", lvm.namespace, lvm.name).Output()
 	o.Expect(err).NotTo(o.HaveOccurred())
 	return lvmClusterDesc
 }
 
 // Get the Name of existing lvmCluster CR
-func getCurrentLVMClusterName(oc *exutil.CLI) string {
-	output, err := oc.AsAdmin().Run("get").Args("lvmcluster", "-n", "openshift-lvm-storage", "-o=custom-columns=NAME:.metadata.name", "--no-headers").Output()
+func getCurrentLVMClusterName(tc *TestClient) string {
+	output, err := tc.AsAdmin().Run("get").Args("lvmcluster", "-n", "openshift-lvm-storage", "-o=custom-columns=NAME:.metadata.name", "--no-headers").Output()
 	o.Expect(err).NotTo(o.HaveOccurred())
 	return strings.TrimSpace(output)
 }
 
 // Waiting for the lvmCluster to become Ready
-func (lvm *lvmCluster) waitReady(oc *exutil.CLI) {
+func (lvm *lvmCluster) waitReady(tc *TestClient) {
 	err := wait.Poll(5*time.Second, 240*time.Second, func() (bool, error) {
-		readyFlag, errinfo := lvm.getLvmClusterStatus(oc)
+		readyFlag, errinfo := lvm.getLvmClusterStatus(tc)
 		if errinfo != nil {
 			e2e.Logf("Failed to get LvmCluster status: %v, wait for next round to get.", errinfo)
 			return false, nil
@@ -324,24 +323,24 @@ func (lvm *lvmCluster) waitReady(oc *exutil.CLI) {
 	})
 
 	if err != nil {
-		lvmClusterDesc := lvm.describeLvmCluster(oc)
-		e2e.Logf("oc describe lvmcluster %s:\n%s", lvm.name, lvmClusterDesc)
+		lvmClusterDesc := lvm.describeLvmCluster(tc)
+		e2e.Logf("tc describe lvmcluster %s:\n%s", lvm.name, lvmClusterDesc)
 		o.Expect(err).NotTo(o.HaveOccurred(), fmt.Sprintf("lvmcluster %s not ready", lvm.name))
 	}
 }
 
 // Get the List of unused free block devices/disks along with their total count from all the worker nodes
-func getListOfFreeDisksFromWorkerNodes(oc *exutil.CLI) map[string]int64 {
+func getListOfFreeDisksFromWorkerNodes(tc *TestClient) map[string]int64 {
 	freeDiskNamesCount := make(map[string]int64)
-	workerNodes := getWorkersList(oc)
+	workerNodes := getWorkersList(tc)
 
 	for _, workerName := range workerNodes {
 		isDiskFound := false
-		output, err := execCommandInSpecificNode(oc, workerName, "lsblk | grep disk | awk '{print $1}'")
+		output, err := execCommandInSpecificNode(tc, workerName, "lsblk | grep disk | awk '{print $1}'")
 		o.Expect(err).NotTo(o.HaveOccurred())
 		diskList := strings.Split(output, "\n")
 		for _, diskName := range diskList {
-			output, _ := execCommandInSpecificNode(oc, workerName, "blkid /dev/"+diskName)
+			output, _ := execCommandInSpecificNode(tc, workerName, "blkid /dev/"+diskName)
 			if strings.Contains(output, "LVM") || len(strings.TrimSpace(output)) == 0 { // disks that are used by existing LVMCluster have TYPE='LVM' OR  Unused free disk does not return any output
 				freeDiskNamesCount[diskName] = freeDiskNamesCount[diskName] + 1
 				isDiskFound = true // atleast 1 required free disk found
@@ -357,15 +356,15 @@ func getListOfFreeDisksFromWorkerNodes(oc *exutil.CLI) map[string]int64 {
 }
 
 // Get the list of worker nodes along with lvms usable block devices/disks count attached to nodes
-func getLVMSUsableDiskCountFromWorkerNodes(oc *exutil.CLI) map[string]int64 {
+func getLVMSUsableDiskCountFromWorkerNodes(tc *TestClient) map[string]int64 {
 	freeWorkerDiskCount := make(map[string]int64)
-	workerNodes := getSchedulableLinuxWorkers(getAllNodesInfo(oc))
+	workerNodes := getSchedulableLinuxWorkers(getAllNodesInfo(tc))
 	for _, workerNode := range workerNodes {
-		output, err := execCommandInSpecificNode(oc, workerNode.name, "lsblk | grep disk | awk '{print $1}'")
+		output, err := execCommandInSpecificNode(tc, workerNode.name, "lsblk | grep disk | awk '{print $1}'")
 		o.Expect(err).NotTo(o.HaveOccurred())
 		diskList := strings.Fields(output)
 		for _, diskName := range diskList {
-			output, _ := execCommandInSpecificNode(oc, workerNode.name, "blkid /dev/"+diskName)
+			output, _ := execCommandInSpecificNode(tc, workerNode.name, "blkid /dev/"+diskName)
 			if strings.Contains(output, "LVM") || len(strings.TrimSpace(output)) == 0 { // disks that are used by existing LVMCluster have TYPE='LVM' OR  Unused free disk does not return any output
 				freeWorkerDiskCount[workerNode.name] = freeWorkerDiskCount[workerNode.name] + 1
 			}
@@ -375,40 +374,40 @@ func getLVMSUsableDiskCountFromWorkerNodes(oc *exutil.CLI) map[string]int64 {
 }
 
 // Get the list of unused block devices/disks from given node
-func getUnusedBlockDevicesFromNode(oc *exutil.CLI, nodeName string) (deviceList []string) {
+func getUnusedBlockDevicesFromNode(tc *TestClient, nodeName string) (deviceList []string) {
 	listDeviceCmd := "echo $(lsblk --fs --json | jq -r '.blockdevices[] | select(.children == null and .fstype == null) | .name')"
-	output, err := execCommandInSpecificNode(oc, nodeName, listDeviceCmd)
+	output, err := execCommandInSpecificNode(tc, nodeName, listDeviceCmd)
 	o.Expect(err).NotTo(o.HaveOccurred())
 	deviceList = strings.Fields(output)
 	return deviceList
 }
 
 // Creates a sofwtare RAID Level-1 disk using two disks/block devices available on a node
-func createRAIDLevel1Disk(oc *exutil.CLI, nodeName string, raidDiskName string) {
-	deviceList := getUnusedBlockDevicesFromNode(oc, nodeName)
+func createRAIDLevel1Disk(tc *TestClient, nodeName string, raidDiskName string) {
+	deviceList := getUnusedBlockDevicesFromNode(tc, nodeName)
 	o.Expect(len(deviceList) < 2).NotTo(o.BeTrue(), "Worker node: "+nodeName+" doesn't have at least two unused block devices/disks")
 	raidCreateCmd := "yes | mdadm --create /dev/" + raidDiskName + " --level=1 --raid-devices=2 --assume-clean " + "/dev/" + deviceList[0] + " " + "/dev/" + deviceList[1]
 	checkRaidStatCmd := "cat /proc/mdstat"
-	cmdOutput, _err := execCommandInSpecificNode(oc, nodeName, raidCreateCmd)
+	cmdOutput, _err := execCommandInSpecificNode(tc, nodeName, raidCreateCmd)
 	o.Expect(_err).NotTo(o.HaveOccurred())
 	o.Expect(cmdOutput).To(o.ContainSubstring("mdadm: array /dev/" + raidDiskName + " started"))
 	o.Eventually(func() string {
-		raidState, _ := execCommandInSpecificNode(oc, nodeName, checkRaidStatCmd)
+		raidState, _ := execCommandInSpecificNode(tc, nodeName, checkRaidStatCmd)
 		return raidState
 	}, 120*time.Second, 10*time.Second).Should(o.ContainSubstring(raidDiskName + " : active raid1"))
 }
 
 // Removes a sofwtare RAID disk from a node
-func removeRAIDLevelDisk(oc *exutil.CLI, nodeName string, raidDiskName string) {
+func removeRAIDLevelDisk(tc *TestClient, nodeName string, raidDiskName string) {
 	checkRaidStatCmd := "cat /proc/mdstat"
 	var deviceList []string
-	output, err := execCommandInSpecificNode(oc, nodeName, "lsblk | grep disk | awk '{print $1}'")
+	output, err := execCommandInSpecificNode(tc, nodeName, "lsblk | grep disk | awk '{print $1}'")
 	o.Expect(err).NotTo(o.HaveOccurred())
 	diskList := strings.Fields(output)
-	cmdOutput, _err := execCommandInSpecificNode(oc, nodeName, checkRaidStatCmd)
+	cmdOutput, _err := execCommandInSpecificNode(tc, nodeName, checkRaidStatCmd)
 	o.Expect(_err).NotTo(o.HaveOccurred())
 	for _, diskName := range diskList {
-		output, _ := execCommandInSpecificNode(oc, nodeName, "blkid /dev/"+diskName)
+		output, _ := execCommandInSpecificNode(tc, nodeName, "blkid /dev/"+diskName)
 		if strings.Contains(output, "raid_member") { // disks that are used by software RAID have TYPE='raid_member'
 			if strings.Contains(cmdOutput, diskName) {
 				deviceList = append(deviceList, "/dev/"+diskName)
@@ -421,29 +420,29 @@ func removeRAIDLevelDisk(oc *exutil.CLI, nodeName string, raidDiskName string) {
 	o.Expect(len(deviceList) < 2).NotTo(o.BeTrue())
 	raidStopCmd := "mdadm --stop /dev/" + raidDiskName
 	raidCleanBlockCmd := "mdadm --zero-superblock " + deviceList[0] + " " + deviceList[1]
-	cmdOutput, _err = execCommandInSpecificNode(oc, nodeName, raidStopCmd)
+	cmdOutput, _err = execCommandInSpecificNode(tc, nodeName, raidStopCmd)
 	o.Expect(_err).NotTo(o.HaveOccurred())
 	o.Expect(cmdOutput).To(o.ContainSubstring("mdadm: stopped /dev/" + raidDiskName))
-	_, err = execCommandInSpecificNode(oc, nodeName, raidCleanBlockCmd)
+	_, err = execCommandInSpecificNode(tc, nodeName, raidCleanBlockCmd)
 	o.Expect(err).NotTo(o.HaveOccurred())
 	o.Eventually(func() string {
-		raidState, _ := execCommandInSpecificNode(oc, nodeName, checkRaidStatCmd)
+		raidState, _ := execCommandInSpecificNode(tc, nodeName, checkRaidStatCmd)
 		return raidState
 	}, 120*time.Second, 10*time.Second).ShouldNot(o.ContainSubstring(raidDiskName))
 }
 
 // Remove the finalizers from lvmcluster config and then delete LVMCluster
-func (lvm *lvmCluster) deleteLVMClusterSafely(oc *exutil.CLI) {
-	if isSpecifiedResourceExist(oc, "lvmcluster/"+lvm.name, lvm.namespace) {
-		patchResourceAsAdmin(oc, lvm.namespace, "lvmcluster/"+lvm.name, "[{\"op\": \"remove\", \"path\": \"/metadata/finalizers\"}]", "json")
-		deleteSpecifiedResource(oc.AsAdmin(), "lvmcluster", lvm.name, lvm.namespace)
+func (lvm *lvmCluster) deleteLVMClusterSafely(tc *TestClient) {
+	if isSpecifiedResourceExist(tc, "lvmcluster/"+lvm.name, lvm.namespace) {
+		patchResourceAsAdmin(tc, lvm.namespace, "lvmcluster/"+lvm.name, "[{\"op\": \"remove\", \"path\": \"/metadata/finalizers\"}]", "json")
+		deleteSpecifiedResource(tc.AsAdmin(), "lvmcluster", lvm.name, lvm.namespace)
 	}
 }
 
 // Get currently available storage capacity by Storage class that can be used by LVMS to provision PV
-func (lvm *lvmCluster) getCurrentTotalLvmStorageCapacityByStorageClass(oc *exutil.CLI, scName string) int {
+func (lvm *lvmCluster) getCurrentTotalLvmStorageCapacityByStorageClass(tc *TestClient, scName string) int {
 	var totalCapacity int = 0
-	storageCapacity, err := oc.AsAdmin().WithoutNamespace().Run("get").Args("csistoragecapacity", "-n", "openshift-lvm-storage", "-ojsonpath={.items[?(@.storageClassName==\""+scName+"\")].capacity}").Output()
+	storageCapacity, err := tc.AsAdmin().WithoutNamespace().Run("get").Args("csistoragecapacity", "-n", "openshift-lvm-storage", "-ojsonpath={.items[?(@.storageClassName==\""+scName+"\")].capacity}").Output()
 	o.Expect(err).NotTo(o.HaveOccurred())
 	e2e.Logf("Storage capacity object sizes: " + storageCapacity)
 	if len(storageCapacity) != 0 {
@@ -458,11 +457,11 @@ func (lvm *lvmCluster) getCurrentTotalLvmStorageCapacityByStorageClass(oc *exuti
 }
 
 // Get currently available storage capacity by Worker Node that can be used by LVMS to provision PV
-func (lvm *lvmCluster) getCurrentTotalLvmStorageCapacityByWorkerNode(oc *exutil.CLI, workerNode string) int {
+func (lvm *lvmCluster) getCurrentTotalLvmStorageCapacityByWorkerNode(tc *TestClient, workerNode string) int {
 	var totalCapacity int = 0
 	var storageCapacity string
 	o.Eventually(func() string { // re-try until capacity value is returned in 'Mi'
-		storageCapacity, _ = oc.AsAdmin().WithoutNamespace().Run("get").Args("csistoragecapacity", "-n", "openshift-lvm-storage",
+		storageCapacity, _ = tc.AsAdmin().WithoutNamespace().Run("get").Args("csistoragecapacity", "-n", "openshift-lvm-storage",
 			fmt.Sprintf(`-ojsonpath='{.items[?(@.nodeTopology.matchLabels.topology\.topolvm\.io/node=="%s")].capacity}`, workerNode)).Output()
 		return storageCapacity
 	}, 180*time.Second, 5*time.Second).Should(o.ContainSubstring("Mi")) // lvms storage capacity is always returned in 'Mi' unit
@@ -481,12 +480,12 @@ func (lvm *lvmCluster) getCurrentTotalLvmStorageCapacityByWorkerNode(oc *exutil.
 }
 
 // Get the total disk size (Gi) of a backend disk by name on all available worker nodes
-func getTotalDiskSizeOnAllWorkers(oc *exutil.CLI, diskPath string) int {
-	workerNodes := getWorkersList(oc)
+func getTotalDiskSizeOnAllWorkers(tc *TestClient, diskPath string) int {
+	workerNodes := getWorkersList(tc)
 	var totalDiskSize int = 0
 	for _, workerName := range workerNodes {
 		size := 0
-		output, _ := execCommandInSpecificNode(oc, workerName, "lsblk -b --output SIZE -n -d "+diskPath)
+		output, _ := execCommandInSpecificNode(tc, workerName, "lsblk -b --output SIZE -n -d "+diskPath)
 		if !strings.Contains(output, "not a block device") {
 			e2e.Logf("Disk: %s found in worker node: %s", diskPath, workerName)
 			size = bytesToGiB(strings.TrimSpace(output))
@@ -506,91 +505,91 @@ func bytesToGiB(bytesStr string) int {
 }
 
 // Wait for LVMS resource pods to get ready
-func waitLVMSProvisionerReady(oc *exutil.CLI) {
+func waitLVMSProvisionerReady(tc *TestClient) {
 	var lvmsPodList []string
 	lvmsNS := "openshift-lvm-storage"
 	o.Eventually(func() bool {
-		lvmsPodList, _ = getPodsListByLabel(oc.AsAdmin(), lvmsNS, "app.kubernetes.io/part-of=lvms-provisioner")
+		lvmsPodList, _ = getPodsListByLabel(tc.AsAdmin(), lvmsNS, "app.kubernetes.io/part-of=lvms-provisioner")
 		return len(lvmsPodList) >= 2
 	}, 120*time.Second, 5*time.Second).Should(o.BeTrue())
 	for _, podName := range lvmsPodList {
-		waitPodReady(oc, lvmsNS, podName)
+		waitPodReady(tc, lvmsNS, podName)
 	}
 }
 
 // Get LVMCluster device paths
-func getLvmClusterPaths(oc *exutil.CLI) []string {
-	currentLVMClusterName := getCurrentLVMClusterName(oc)
-	output, err := oc.AsAdmin().WithoutNamespace().Run("get").Args("lvmcluster", "-n", "openshift-lvm-storage", currentLVMClusterName, "-o=jsonpath={.status.deviceClassStatuses[*].nodeStatus[*].devices[*]}").Output()
+func getLvmClusterPaths(tc *TestClient) []string {
+	currentLVMClusterName := getCurrentLVMClusterName(tc)
+	output, err := tc.AsAdmin().WithoutNamespace().Run("get").Args("lvmcluster", "-n", "openshift-lvm-storage", currentLVMClusterName, "-o=jsonpath={.status.deviceClassStatuses[*].nodeStatus[*].devices[*]}").Output()
 	o.Expect(err).NotTo(o.HaveOccurred())
 	e2e.Logf("LVMCluster device paths are: %q", output)
 	return strings.Fields(output)
 }
 
 // Gets the LVMS provisioned volume located node's name
-func getLogicalVolumeSelectedNode(oc *exutil.CLI, namespace string, pvcName string) string {
-	nodeName, err := oc.WithoutNamespace().Run("get").Args("pvc", pvcName, "-n", namespace, "-ojsonpath={.metadata.annotations.volume\\.kubernetes\\.io/selected-node}").Output()
+func getLogicalVolumeSelectedNode(tc *TestClient, namespace string, pvcName string) string {
+	nodeName, err := tc.WithoutNamespace().Run("get").Args("pvc", pvcName, "-n", namespace, "-ojsonpath={.metadata.annotations.volume\\.kubernetes\\.io/selected-node}").Output()
 	o.Expect(err).NotTo(o.HaveOccurred())
 	e2e.Logf("The nodename in namespace %s for pvc %s is %s", namespace, pvcName, nodeName)
 	return nodeName
 }
 
-func setDiskEncryptPassphrase(oc *exutil.CLI, disk string, passphrase string, workerNodes []string) {
+func setDiskEncryptPassphrase(tc *TestClient, disk string, passphrase string, workerNodes []string) {
 	diskName := "/dev/" + disk
 
 	for _, workerName := range workerNodes {
 		// Format the disk with LUKS using the passphrase
 		cmd := "echo -e \"" + passphrase + "\\n" + passphrase + "\" | cryptsetup -y -v luksFormat " + diskName
-		_, err := execCommandInSpecificNode(oc, workerName, cmd)
+		_, err := execCommandInSpecificNode(tc, workerName, cmd)
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		// Verify the encrypted disk using the same passphrase
 		openCmd := "echo '" + passphrase + "' | cryptsetup luksOpen " + diskName + " encrypted"
-		_, err = execCommandInSpecificNode(oc, workerName, openCmd)
+		_, err = execCommandInSpecificNode(tc, workerName, openCmd)
 		o.Expect(err).NotTo(o.HaveOccurred())
 	}
 }
 
-func wipeDiskEncryptPassphrase(oc *exutil.CLI, disk string, workerNodes []string) {
+func wipeDiskEncryptPassphrase(tc *TestClient, disk string, workerNodes []string) {
 	diskName := "/dev/" + disk
 
 	for _, workerName := range workerNodes {
 		// Close encrypted volume
 		closeCmd := "cryptsetup luksClose encrypted"
-		_, err := execCommandInSpecificNode(oc, workerName, closeCmd)
+		_, err := execCommandInSpecificNode(tc, workerName, closeCmd)
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		// Erase LUKS header
 		eraseCmd := "echo 'YES' | cryptsetup luksErase " + diskName
-		_, err = execCommandInSpecificNode(oc, workerName, eraseCmd)
+		_, err = execCommandInSpecificNode(tc, workerName, eraseCmd)
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		// Wipe filesystem signatures
 		wipeCmd := "wipefs -a " + diskName
-		_, err = execCommandInSpecificNode(oc, workerName, wipeCmd)
+		_, err = execCommandInSpecificNode(tc, workerName, wipeCmd)
 		o.Expect(err).NotTo(o.HaveOccurred())
 	}
 }
 
 // Get the current lvmCluster path
-func getLvmClusterPath(oc *exutil.CLI) string {
-	currentLVMClusterName := getCurrentLVMClusterName(oc)
-	selectedDisk, err := oc.AsAdmin().WithoutNamespace().Run("get").Args("lvmcluster", "-n", "openshift-lvm-storage", currentLVMClusterName, "-o=jsonpath={.status.deviceClassStatuses[*].nodeStatus[*].devices[*]}").Output()
+func getLvmClusterPath(tc *TestClient) string {
+	currentLVMClusterName := getCurrentLVMClusterName(tc)
+	selectedDisk, err := tc.AsAdmin().WithoutNamespace().Run("get").Args("lvmcluster", "-n", "openshift-lvm-storage", currentLVMClusterName, "-o=jsonpath={.status.deviceClassStatuses[*].nodeStatus[*].devices[*]}").Output()
 	o.Expect(err).NotTo(o.HaveOccurred())
 	e2e.Logf("the current LVM cluster path is: %q", selectedDisk)
 	return selectedDisk
 }
 
 // Delete current LVM cluster
-func deleteCurrentLVMCluster(oc *exutil.CLI) {
-	currentLVMClusterName := getCurrentLVMClusterName(oc)
-	oc.AsAdmin().Run("delete").Args("lvmcluster", currentLVMClusterName, "-n", "openshift-lvm-storage", "--wait=false").Execute()
+func deleteCurrentLVMCluster(tc *TestClient) {
+	currentLVMClusterName := getCurrentLVMClusterName(tc)
+	tc.AsAdmin().Run("delete").Args("lvmcluster", currentLVMClusterName, "-n", "openshift-lvm-storage", "--wait=false").Execute()
 }
 
 // Remove the finalizer from lvmcluster config
-func (lvm *lvmCluster) removeLVMClusterFinalizer(oc *exutil.CLI) {
-	if isSpecifiedResourceExist(oc, "lvmcluster/"+lvm.name, lvm.namespace) {
-		patchResourceAsAdmin(oc, lvm.namespace, "lvmcluster/"+lvm.name, "{\"metadata\":{\"finalizers\":[]}}", "merge")
+func (lvm *lvmCluster) removeLVMClusterFinalizer(tc *TestClient) {
+	if isSpecifiedResourceExist(tc, "lvmcluster/"+lvm.name, lvm.namespace) {
+		patchResourceAsAdmin(tc, lvm.namespace, "lvmcluster/"+lvm.name, "{\"metadata\":{\"finalizers\":[]}}", "merge")
 		e2e.Logf("LVMCluster Finalizer patch applied")
 	} else {
 		e2e.Logf("LVMCluster resource not found: %q", lvm.name)
@@ -598,9 +597,9 @@ func (lvm *lvmCluster) removeLVMClusterFinalizer(oc *exutil.CLI) {
 }
 
 // Patch the LVMVolumeGroup to remove finalizers
-func (lvm *lvmCluster) removeLVMVolumeGroupFinalizer(oc *exutil.CLI) {
-	if isSpecifiedResourceExist(oc, "lvmvolumegroup/"+lvm.deviceClassName, lvm.namespace) {
-		patchResourceAsAdmin(oc, lvm.namespace, "lvmvolumegroup/"+lvm.deviceClassName, "{\"metadata\":{\"finalizers\":[]}}", "merge")
+func (lvm *lvmCluster) removeLVMVolumeGroupFinalizer(tc *TestClient) {
+	if isSpecifiedResourceExist(tc, "lvmvolumegroup/"+lvm.deviceClassName, lvm.namespace) {
+		patchResourceAsAdmin(tc, lvm.namespace, "lvmvolumegroup/"+lvm.deviceClassName, "{\"metadata\":{\"finalizers\":[]}}", "merge")
 		e2e.Logf("Lvm volumegroup patch applied")
 	} else {
 		e2e.Logf("LVM VolumeGroup resource not found: %q", lvm.deviceClassName)
@@ -608,12 +607,12 @@ func (lvm *lvmCluster) removeLVMVolumeGroupFinalizer(oc *exutil.CLI) {
 }
 
 // Patch the LVMVolumeGroupNodeStatus to remove finalizers
-func (lvm *lvmCluster) removeLVMVolumeGroupNodeStatusFinalizer(oc *exutil.CLI) {
-	workerNodes := getWorkersList(oc)
+func (lvm *lvmCluster) removeLVMVolumeGroupNodeStatusFinalizer(tc *TestClient) {
+	workerNodes := getWorkersList(tc)
 	e2e.Logf("workerNodes : %q", workerNodes)
 	for _, workerName := range workerNodes {
-		if isSpecifiedResourceExist(oc, "lvmvolumegroupnodestatus/"+workerName, lvm.namespace) {
-			patchResourceAsAdmin(oc, lvm.namespace, "lvmvolumegroupnodestatus/"+workerName, "{\"metadata\":{\"finalizers\":[]}}", "merge")
+		if isSpecifiedResourceExist(tc, "lvmvolumegroupnodestatus/"+workerName, lvm.namespace) {
+			patchResourceAsAdmin(tc, lvm.namespace, "lvmvolumegroupnodestatus/"+workerName, "{\"metadata\":{\"finalizers\":[]}}", "merge")
 			e2e.Logf("LVMVolumeGroupNodeStatus Patched on node: %q", workerName)
 		} else {
 			e2e.Logf("LVM VolumeGroupNodeStatus resource not found on node: %q", workerName)
@@ -622,25 +621,25 @@ func (lvm *lvmCluster) removeLVMVolumeGroupNodeStatusFinalizer(oc *exutil.CLI) {
 }
 
 // Patch the LVMCluster to set metadataSizeCalculationPolicy and metadataSize
-func (lvm *lvmCluster) patchMetadataSizeCalculationPolicyToStatic(oc *exutil.CLI, metadataSize string) {
-	if isSpecifiedResourceExist(oc, "lvmcluster/"+lvm.name, lvm.namespace) {
+func (lvm *lvmCluster) patchMetadataSizeCalculationPolicyToStatic(tc *TestClient, metadataSize string) {
+	if isSpecifiedResourceExist(tc, "lvmcluster/"+lvm.name, lvm.namespace) {
 		patch := fmt.Sprintf(`[
 		{"op": "replace", "path": "/spec/storage/deviceClasses/0/thinPoolConfig/metadataSizeCalculationPolicy", "value": "Static"},
 		{"op": "replace", "path": "/spec/storage/deviceClasses/0/thinPoolConfig/metadataSize", "value": "%s"}
 		]`, metadataSize)
-		patchResourceAsAdmin(oc, lvm.namespace, "lvmcluster/"+lvm.name, patch, "json")
+		patchResourceAsAdmin(tc, lvm.namespace, "lvmcluster/"+lvm.name, patch, "json")
 		e2e.Logf("Patched LVMCluster %s with metadataSizeCalculationPolicy set to 'Static' and metadataSize to %s", lvm.name, metadataSize)
 	}
 }
 
 // Patch the LVMCluster to set overprovisionRatio
-func (lvm *lvmCluster) patchOverprovisionRatio(oc *exutil.CLI, overprovisionRatio string) {
-	if isSpecifiedResourceExist(oc, "lvmcluster/"+lvm.name, lvm.namespace) {
+func (lvm *lvmCluster) patchOverprovisionRatio(tc *TestClient, overprovisionRatio string) {
+	if isSpecifiedResourceExist(tc, "lvmcluster/"+lvm.name, lvm.namespace) {
 		patch := fmt.Sprintf(`[
             {"op": "replace", "path": "/spec/storage/deviceClasses/0/thinPoolConfig/overprovisionRatio", "value": %s}
         ]`, overprovisionRatio)
 
-		patchResourceAsAdmin(oc, lvm.namespace, "lvmcluster/"+lvm.name, patch, "json")
+		patchResourceAsAdmin(tc, lvm.namespace, "lvmcluster/"+lvm.name, patch, "json")
 		e2e.Logf("Patched LVMCluster %s with overprovisionRatio=%s", lvm.name, overprovisionRatio)
 	}
 }

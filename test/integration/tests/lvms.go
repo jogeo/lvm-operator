@@ -6,11 +6,9 @@ package tests
 import (
 	"math"
 	"path/filepath"
-	"strconv"
 
 	g "github.com/onsi/ginkgo/v2"
 	o "github.com/onsi/gomega"
-	exutil "github.com/openshift/origin/test/extended/util"
 	e2e "k8s.io/kubernetes/test/e2e/framework"
 )
 
@@ -18,7 +16,7 @@ var _ = g.Describe("[LVMS][Disruptive] LVMCluster", g.Label("LVMS", "Disruptive"
 	defer g.GinkgoRecover()
 
 	var (
-		oc = exutil.NewCLI("lvms-test")
+		tc = NewTestClient("lvms-test")
 	)
 
 	// author: rdeore@redhat.com
@@ -35,11 +33,11 @@ var _ = g.Describe("[LVMS][Disruptive] LVMCluster", g.Label("LVMS", "Disruptive"
 		)
 
 		g.By("#. Get list of available block devices/disks attached to all worker nodes")
-		freeDiskNameCountMap := getListOfFreeDisksFromWorkerNodes(oc)
+		freeDiskNameCountMap := getListOfFreeDisksFromWorkerNodes(tc)
 		if len(freeDiskNameCountMap) < 2 { // this test requires atleast 2 unique disks
 			g.Skip("Skipped: Cluster's Worker nodes does not have minimum required free block devices/disks attached")
 		}
-		workerNodeCount := len(getWorkersList(oc))
+		workerNodeCount := len(getWorkersList(tc))
 		var devicePaths []string
 		for diskName, count := range freeDiskNameCountMap {
 			if count == int64(workerNodeCount) { // mandatory disk/device with same name present on all worker nodes
@@ -55,43 +53,43 @@ var _ = g.Describe("[LVMS][Disruptive] LVMCluster", g.Label("LVMS", "Disruptive"
 		}
 
 		g.By("#. Copy and save existing LVMCluster configuration in JSON format")
-		lvmClusterName, err := oc.AdminKubeClient().CoreV1().RESTClient().Get().AbsPath("/apis/lvm.topolvm.io/v1alpha1/namespaces/openshift-lvm-storage/lvmclusters").DoRaw(oc.Context())
+		lvmClusterName, err := tc.AdminKubeClient().CoreV1().RESTClient().Get().AbsPath("/apis/lvm.topolvm.io/v1alpha1/namespaces/openshift-lvm-storage/lvmclusters").DoRaw(tc.Context())
 		o.Expect(err).NotTo(o.HaveOccurred())
 		originLvmCluster := newLvmCluster(setLvmClusterName(string(lvmClusterName)), setLvmClusterNamespace("openshift-lvm-storage"))
-		originLVMJSON, err := oc.AsAdmin().WithoutNamespace().Run("get").Args("lvmcluster", originLvmCluster.name, "-n", "openshift-lvm-storage", "-o", "json").Output()
+		originLVMJSON, err := tc.AsAdmin().WithoutNamespace().Run("get").Args("lvmcluster", originLvmCluster.name, "-n", "openshift-lvm-storage", "-o", "json").Output()
 		e2e.Logf("Original LVMCluster saved")
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		g.By("#. Delete existing LVMCluster resource")
-		deleteSpecifiedResource(oc.AsAdmin(), "lvmcluster", originLvmCluster.name, "openshift-lvm-storage")
+		deleteSpecifiedResource(tc.AsAdmin(), "lvmcluster", originLvmCluster.name, "openshift-lvm-storage")
 		defer func() {
-			if !isSpecifiedResourceExist(oc, "lvmcluster/"+originLvmCluster.name, "openshift-lvm-storage") {
-				originLvmCluster.createWithExportJSON(oc, originLVMJSON, originLvmCluster.name)
+			if !isSpecifiedResourceExist(tc, "lvmcluster/"+originLvmCluster.name, "openshift-lvm-storage") {
+				originLvmCluster.createWithExportJSON(tc, originLVMJSON, originLvmCluster.name)
 			}
-			originLvmCluster.waitReady(oc)
+			originLvmCluster.waitReady(tc)
 		}()
 
 		g.By("#. Create a new LVMCluster resource with two device-classes")
 		lvmCluster := newLvmCluster(setLvmClustertemplate(lvmClusterTemplate), setLvmClusterPaths([]string{devicePaths[0], devicePaths[1]}))
-		lvmCluster.createWithMultiDeviceClasses(oc)
-		defer lvmCluster.deleteLVMClusterSafely(oc) // If new lvmCluster creation fails, need to remove finalizers if any
-		lvmCluster.waitReady(oc)
+		lvmCluster.createWithMultiDeviceClasses(tc)
+		defer lvmCluster.deleteLVMClusterSafely(tc) // If new lvmCluster creation fails, need to remove finalizers if any
+		lvmCluster.waitReady(tc)
 
 		g.By("#. Create a new project for the scenario")
-		oc.SetupProject()
+		tc.SetupProject()
 
 		g.By("Check two lvms preset storage-classes are present one for each volumeGroup")
-		checkStorageclassExists(oc, storageClass1)
-		checkStorageclassExists(oc, storageClass2)
+		checkStorageclassExists(tc, storageClass1)
+		checkStorageclassExists(tc, storageClass2)
 
 		g.By("Check only one preset lvms volumeSnapshotClass is present for volumeGroup with thinPoolConfig")
-		o.Expect(isSpecifiedResourceExist(oc, "volumesnapshotclass/"+volumeSnapshotClass, "")).To(o.BeTrue())
-		o.Expect(isSpecifiedResourceExist(oc, "volumesnapshotclass/lvms-vg2", "")).To(o.BeFalse())
+		o.Expect(isSpecifiedResourceExist(tc, "volumesnapshotclass/"+volumeSnapshotClass, "")).To(o.BeTrue())
+		o.Expect(isSpecifiedResourceExist(tc, "volumesnapshotclass/lvms-vg2", "")).To(o.BeFalse())
 
 		g.By("Check available storage capacity of preset lvms SC (thick provisioning) equals to the backend total disks size")
-		thickProvisioningStorageCapacity := lvmCluster.getCurrentTotalLvmStorageCapacityByStorageClass(oc, storageClass2) / 1024
+		thickProvisioningStorageCapacity := lvmCluster.getCurrentTotalLvmStorageCapacityByStorageClass(tc, storageClass2) / 1024
 		e2e.Logf("ACTUAL USABLE STORAGE CAPACITY: %d", thickProvisioningStorageCapacity)
-		pathsDiskTotalSize := getTotalDiskSizeOnAllWorkers(oc, devicePaths[1])
+		pathsDiskTotalSize := getTotalDiskSizeOnAllWorkers(tc, devicePaths[1])
 		e2e.Logf("BACKEND DISK SIZE: %d", pathsDiskTotalSize)
 		storageDiff := float64(thickProvisioningStorageCapacity - pathsDiskTotalSize)
 		absDiff := math.Abs(storageDiff)
@@ -101,47 +99,47 @@ var _ = g.Describe("[LVMS][Disruptive] LVMCluster", g.Label("LVMS", "Disruptive"
 		pvc1 := newPersistentVolumeClaim(setPersistentVolumeClaimTemplate(pvcTemplate), setPersistentVolumeClaimStorageClassName(storageClass1))
 		pvc2 := newPersistentVolumeClaim(setPersistentVolumeClaimTemplate(pvcTemplate), setPersistentVolumeClaimCapacity("20Mi"),
 			setPersistentVolumeClaimStorageClassName(storageClass2))
-		dep1 := newDeployment(setDeploymentTemplate(deploymentTemplate), setDeploymentPVCName(pvc1.name), setDeploymentNamespace(oc.Namespace()))
-		dep2 := newDeployment(setDeploymentTemplate(deploymentTemplate), setDeploymentPVCName(pvc2.name), setDeploymentNamespace(oc.Namespace()))
+		dep1 := newDeployment(setDeploymentTemplate(deploymentTemplate), setDeploymentPVCName(pvc1.name), setDeploymentNamespace(tc.Namespace()))
+		dep2 := newDeployment(setDeploymentTemplate(deploymentTemplate), setDeploymentPVCName(pvc2.name), setDeploymentNamespace(tc.Namespace()))
 
 		g.By("#. Create a pvc-1 with the preset lvms csi storageclass with thin provisioning")
-		pvc1.create(oc)
-		defer pvc1.deleteAsAdmin(oc)
+		pvc1.create(tc)
+		defer pvc1.deleteAsAdmin(tc)
 
 		g.By("#. Create a deployment-1 with the created pvc-1 and wait for the pod ready")
-		dep1.create(oc)
-		defer dep1.deleteAsAdmin(oc)
-		dep1.waitReady(oc)
+		dep1.create(tc)
+		defer dep1.deleteAsAdmin(tc)
+		dep1.waitReady(tc)
 
 		g.By("#. Write a file to volume")
-		dep1.checkPodMountedVolumeCouldRW(oc)
+		dep1.checkPodMountedVolumeCouldRW(tc)
 
 		g.By("#. Create a pvc-2 with the preset lvms csi storageclass with thick provisioning")
-		pvc2.create(oc)
-		defer pvc2.deleteAsAdmin(oc)
+		pvc2.create(tc)
+		defer pvc2.deleteAsAdmin(tc)
 
 		g.By("#. Create a deployment-2 with the created pvc-2 and wait for the pod ready")
-		dep2.create(oc)
-		defer dep2.deleteAsAdmin(oc)
-		dep2.waitReady(oc)
+		dep2.create(tc)
+		defer dep2.deleteAsAdmin(tc)
+		dep2.waitReady(tc)
 
 		g.By("#. Write a file to volume")
-		dep2.checkPodMountedVolumeCouldRW(oc)
+		dep2.checkPodMountedVolumeCouldRW(tc)
 
 		g.By("#. Resize pvc-2 storage capacity to a value bigger than 1Gi")
-		pvc2.resizeAndCheckDataIntegrity(oc, dep2, "2Gi")
+		pvc2.resizeAndCheckDataIntegrity(tc, dep2, "2Gi")
 
 		g.By("Delete Deployments and PVCs")
-		deleteSpecifiedResource(oc, "deployment", dep1.name, dep1.namespace)
-		deleteSpecifiedResource(oc, "pvc", pvc1.name, pvc1.namespace)
-		deleteSpecifiedResource(oc, "deployment", dep2.name, dep2.namespace)
-		deleteSpecifiedResource(oc, "pvc", pvc2.name, pvc2.namespace)
+		deleteSpecifiedResource(tc, "deployment", dep1.name, dep1.namespace)
+		deleteSpecifiedResource(tc, "pvc", pvc1.name, pvc1.namespace)
+		deleteSpecifiedResource(tc, "deployment", dep2.name, dep2.namespace)
+		deleteSpecifiedResource(tc, "pvc", pvc2.name, pvc2.namespace)
 
 		g.By("Delete newly created LVMCluster resource")
-		lvmCluster.deleteLVMClusterSafely(oc)
+		lvmCluster.deleteLVMClusterSafely(tc)
 
 		g.By("#. Create original LVMCluster resource")
-		originLvmCluster.createWithExportJSON(oc, originLVMJSON, originLvmCluster.name)
-		originLvmCluster.waitReady(oc)
+		originLvmCluster.createWithExportJSON(tc, originLVMJSON, originLvmCluster.name)
+		originLvmCluster.waitReady(tc)
 	})
 })
